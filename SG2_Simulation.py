@@ -8,8 +8,8 @@ import openpyxl
 
 
 # Vessel Geometry Parameters (SI units)
-R = 0.03      # Radius of cylinder (m)
-L = 0.06;       # Height of cylinder (m)
+R = 0.03      # Radius of cylinder (m) #Original 0.03
+L = 0.06   # Height of cylinder (m) Original 0.06
 fill_fraction = 0.5   #Fraction of total volume filled with water
     
     #Calculate vessel volumes
@@ -73,8 +73,6 @@ B = 2*10**6 #Maximum Population Size
 
 A_initial = 2000 #Initial Popuation, Usually 2000
 
-# A_initial = 25000 #Comment out if not looking at chemostat
-
 C = 4.7*10**-7 #Proporionality Constant between Popluation size and OD Readings
 
 #Noise Parameters
@@ -120,10 +118,11 @@ def temperature_control(T_water,heater_power,k, dt, control_type = 'Bang-Bang'):
             return 1.0
         else:
             return heater_power[k-1]
-
+        
+Pump_On = False
 
 def OD_control(OD_readings,k, dt, control_type):
-
+    global Pump_On
     if control_type == 'None':
         return 0
 
@@ -133,10 +132,18 @@ def OD_control(OD_readings,k, dt, control_type):
     if control_type == 'Open-Loop':
         in_out_flowrate = 0.02*10**-6  #Measure in m^3/s
 
-        
+    if control_type == 'Closed-Loop':
+        if OD_readings[k] >= 0.65:
+            Pump_On = True
+        elif OD_readings[k] <= 0.45:
+            Pump_On = False
+            
+        if Pump_On:
+            in_out_flowrate = 0.2*10**-5
+        else:
+            in_out_flowrate = 0
 
     return in_out_flowrate
-    
     
                         
 def plot_temp_control():
@@ -205,7 +212,7 @@ def get_data(file_name, InterpolateOD=False):
 
     return m_ODReadings, m_Temperatures, m_Times, m_RelayState
 
-def compare_plots_temp(plot_heater_state=False):
+def compare_plots_temp(plot_heater_state=True):
     m_ODReadings, m_Temperatures, m_Times, m_heater_state = get_data('Growth_Curve_Stats.xlsx')
     
     Times, T_water, measured_T,heater_state, ODReadings, A = run_sim(1, int(np.size(m_Times)))
@@ -273,9 +280,9 @@ def compare_plots_chemostat():
 
     ax2 = ax1.twinx()
     
-    ax2.plot(Times, m_ODReadings, label = 'Measured ODReadings', color = 'black')
-    ax2.plot(Times, ODReadings, label = 'Simulated ODReadings', color = 'blue')
-    ax2.set_ylabel('Optical Denisty Readings', color = 'blue')
+    ax2.plot(Times, np.log(m_ODReadings), label = 'Measured log ODReadings', color = 'black')
+    ax2.plot(Times, np.log(ODReadings), label = 'Simulated log ODReadings', color = 'blue')
+    ax2.set_ylabel('Log Optical Denisty Readings', color = 'blue')
     plt.title("OD Readings & Temperature over time")
     ax2.legend(loc="lower right")
     ##    plt.ylim(0,2)
@@ -283,7 +290,38 @@ def compare_plots_chemostat():
     plt.grid()
     plt.show()
 
+def compare_plots_turbidostat():
+    global A_initial
+    global alpha_max
+    global heater_delay
+    heater_delay = 70
+    A_initial = 10000
+    doubling_time = 15 # Doubling time in minutes
+    alpha_max = np.log(2)/(doubling_time*60)
 
+    
+    m_ODReadings, m_Temperatures, m_Times, m_heater_state = get_data('OD_Control_Stats.xlsx')
+    Times, T_water, measured_T,heater_state, ODReadings, A = run_sim(1, int(np.size(m_Times)), OD_control_type = 'Closed-Loop')
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel("Temperatures (°C)", color = 'red')
+    ax1.plot(Times, m_Temperatures, label = 'Measured Temperature', color = 'purple')
+    ax1.plot(Times, measured_T, label = 'Simulated Temperaure', color = 'red')
+    plt.ylim(25,33)
+    ax1.legend(loc='lower left')
+
+    ax2 = ax1.twinx()
+    
+    ax2.plot(Times, np.log(m_ODReadings), label = 'Measured log ODReadings', color = 'black')
+    ax2.plot(Times, np.log(ODReadings), label = 'Simulated log ODReadings', color = 'blue')
+    ax2.set_ylabel('Log Optical Denisty Readings', color = 'blue')
+    plt.title("OD Readings & Temperature over time")
+    ax2.legend(loc="lower right")
+    #plt.ylim(0,2)
+    plt.grid()
+    plt.show()
+
+heater_delay = 139 # Heater power increases the longer heater remains on 
 # Run Simuation
 
 def run_sim(dt, t_end, temp_control_type = 'Bang-Bang', OD_control_type = 'None'):
@@ -307,8 +345,6 @@ def run_sim(dt, t_end, temp_control_type = 'Bang-Bang', OD_control_type = 'None'
             heater_on_time+=1*dt
         else:
             heater_on_time = 0
-
-        heater_delay = 139 # Heater power increases the longer heater remains on
         
         Q_heater = heater_state[k-1-heater_delay] * Q_heater_const 
         
@@ -361,7 +397,8 @@ def run_sim(dt, t_end, temp_control_type = 'Bang-Bang', OD_control_type = 'None'
         
     return Times, T_water, measured_T,heater_state, OD, A
 
-compare_plots_chemostat()
+compare_plots_turbidostat()
+
 
 
 
