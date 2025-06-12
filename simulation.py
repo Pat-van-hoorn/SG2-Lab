@@ -65,20 +65,33 @@ T_initial = 28.5
 
 # Bacterial Growth Parameters
 doubling_time = 46.5 # Doubling timein minutes
-alpha_max = np.log(2)/(doubling_time*60) # Maximum Growth Rate
 B = 2e8              # Maximum Population Size
 A_initial = 2000     # Initial Popuation, Usually 2000
 C = 4.7e-7           # Proporionality Constant between Popluation size and OD Readings
 
+chemostat_rate = 0.012e-6
+turbidostat_rate = 0.2e-5
+
 # Noise Parameters
 noise = True
-if noise:
-    Tg_sigma = 0.04
-    Tm_sigma = 0.03
-    Growth_Rate_sigma_mu = 1     # Models intrinsic noise in gene expression - always set to 1!!
-    OD_measurement_sigma = 0.001
-else:
-    Tg_sigma, Tm_sigma, Growth_Rate_sigma_mu, OD_measurement_sigma = 0,0,1,0
+
+def calculate_noise():
+    global noise, Tg_sigma, Tm_sigma, Growth_Rate_sigma_mu, OD_measurement_sigma, alpha_max
+    alpha_max = np.log(2)/(doubling_time*60) # Maximum Growth Rate
+    if noise == True:
+        Tg_sigma = 0.04
+        Tm_sigma = 0.03
+        Growth_Rate_sigma_mu = 1     # Models intrinsic noise in gene expression - always set to 1!!
+        OD_measurement_sigma = 0.001
+    elif noise == False:
+        Tg_sigma, Tm_sigma, Growth_Rate_sigma_mu, OD_measurement_sigma = 0,0,1,0
+    else:
+        Tg_sigma             = noise * 0.04
+        Tm_sigma             = noise * 0.03
+        Growth_Rate_sigma_mu = 1 + noise
+        OD_measurement_sigma = noise * 0.001
+
+calculate_noise()
 
 # Control variables
 target_temp = 30      # Target temperature
@@ -86,7 +99,7 @@ hysteresis_band = 0.5 # For hysterisis control
 control_delay = 5     # For bang-bang control, seconds
 control_types = { 'None': 0, 'Bang-Bang': 1, 'Hysterisis': 2, 'Open-Loop': 1, 'Closed-Loop': 2 }
 temp_control_type = control_types['Bang-Bang'] # 0 for None, 1 for Bang-Bang, 2 for Hysterisis
-od_control_type = control_types['Closed-Loop']  # 0 for None, 1 for Open-Loop, 2 for Closed-Loop 
+od_control_type = control_types['Closed-Loop'] # 0 for None, 1 for Open-Loop, 2 for Closed-Loop 
 
 def temperature_control(k):
     # None
@@ -115,7 +128,7 @@ def OD_control(k):
     # Open Loop control
     # Set both motor powers to 65, corresponds to fluid inflow/outflow rate of 0.02ml/s
     elif od_control_type == 1:
-        return 0.012e-6  # Measured in m^3/s
+        return chemostat_rate  # Measured in m^3/s
     # Closed Loop control
     elif od_control_type == 2:
         global pump_state
@@ -124,7 +137,7 @@ def OD_control(k):
         elif not pump_state and OD[k] >= 0.7:
             pump_state = True
         
-        return 0.2e-5 if pump_state else 0
+        return turbidostat_rate if pump_state else 0
 
 # Simulation length variables
 dt = 1
@@ -181,8 +194,11 @@ def run():
         Tm[k] = Ts[k] + random.gauss(0, Tm_sigma)
         
         # Update Bacteria Population (Due to bacteria growth)
-        dA = A[k-1] * alpha_max * (1-A[k-1]/B) * dt
-        A[k] = A[k-1] + dA + random.gauss(0, Growth_Rate_sigma_mu/A[k-1])*np.sqrt(dt)
+        # shape * scale = 1
+        # shape * scale * scale = 
+        alpha = alpha_max * np.random.gamma(1/Growth_Rate_sigma_mu, Growth_Rate_sigma_mu)
+        dA = A[k-1] * alpha * (1-A[k-1]/B) * dt
+        A[k] = A[k-1] + dA
         # Update OD Measurement
         OD[k] = C*A[k] + random.gauss(0, OD_measurement_sigma) - C*A_initial
 

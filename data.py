@@ -173,10 +173,10 @@ class Experiment:
             self.Twd = self.Twd[mask]
 
     def plot_temperature(self, ax, **kwargs):
-        ax.plot(self.t/60, self.Tw, **kwargs)
+        return ax.plot(self.t/60, self.Tw, **kwargs)
 
     def plot_Rs(self, ax, offset=0, size=1, **kwargs):
-        ax.plot(self.t/60, offset + size*self.Rs, **kwargs)
+        return ax.plot(self.t/60, offset + size*self.Rs, **kwargs)
 
     def plot_constant_in_time(self, ax, value, **kwargs):
         return ax.plot([self.t[0]/60, self.t[-1]/60], [value, value], **kwargs)
