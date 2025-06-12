@@ -127,19 +127,23 @@ def show_plot(title='', ylabel='', xlabel='Time (min)'):
     plt.show()
 
 class Experiment:
-
+    
     def __init__(self, filename):
         self.filename = filename
         self.t, self.OD, self.Tw, self.Rs, self.Ms = get_data(filename)
 
-    def remove_Rs_effect(self, good_start_t, good_end_t):
-        range_mask = np.logical_and(self.t > good_start_t*60, self.t < good_end_t*60)
+    def remove_Rs_effect(self, good_start_t=None, good_end_t=None):
+        if good_start_t == None:
+            good_start_t = self.t[0]/60
+        if good_end_t == None:
+            good_end_t = self.t[-1]/60
+        range_mask = np.logical_and(self.t >= good_start_t*60, self.t <= good_end_t*60)
         new_Rs = self.Rs[range_mask]
         Rs_mask = extend_mask(new_Rs == 0, 10, 1, inverted=True)
         new_ods = interpolate_mask(Rs_mask, self.t[range_mask], self.OD[range_mask])
         od_offsets = self.OD[range_mask] - new_ods
         od_offset = np.mean(od_offsets[new_Rs != 0])
-        self.OD = median_filter(self.OD - od_offset*(Rs != 0), 20)
+        self.OD = median_filter(self.OD - od_offset*(self.Rs != 0), 20)
     
     def calculate_derivatives(self, smooth_n = 150):
         very_smooth_ods = moving_averages(self.OD, smooth_n)
@@ -176,15 +180,6 @@ class Experiment:
 
     def plot_constant_in_time(self, ax, value, **kwargs):
         ax.plot([self.t[0]/60, self.t[-1]/60], [value, value], **kwargs)
-
-    def plot_temperature_control(self):
-        self.plot_temperature(plt, label='Measured Temperaure')
-        self.smooth_data()
-        self.plot_temperature(plt, label='Smoothed Temperature')
-        self.plot_constant_in_time(plt, 29.8, label='Hysterisis Bounds', color='black')
-        self.plot_constant_in_time(plt, 30.2, color='black')
-        self.plot_Rs(plt, 29.3, 0.4, label='Relay state')
-        show_plot(title='Temperature Control Experiment', ylabel='Temperature ($^\\circ$C)')
         
 
 

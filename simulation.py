@@ -49,11 +49,11 @@ calculate_geometry()
     
 # Heat Transfer Parameters
 # Heater: a fixed power is applied when ON.
-Q_heater_const = 3.5  # Heater power (W) when on (Orignal = 10)
+Q_heater_const = 5  # Heater power (W) when on (Orignal = 10)
     
 # Heat transfer coefficients (W/(m^2*K))
 h_gw = 25    # From glass to water (Original = 50)
-h_loss = 3.8 # From glass to ambient (Original = 10)
+h_loss = 2.88 # From glass to ambient (Original = 10)
 
 T_ambient = 22   # Ambient temperature (°C)
 T_initial = 28.5
@@ -61,9 +61,8 @@ T_initial = 28.5
 # Bacterial Growth Parameters
 doubling_time = 46.5 # Doubling timein minutes
 alpha_max = np.log(2)/(doubling_time*60) # Maximum Growth Rate
-B = 2e6              # Maximum Population Size
+B = 2e8              # Maximum Population Size
 A_initial = 2000     # Initial Popuation, Usually 2000
-# A_initial = 25000  # Comment out if not looking at chemostat
 C = 4.7e-7           # Proporionality Constant between Popluation size and OD Readings
 
 # Noise Parameters
@@ -80,11 +79,11 @@ else:
 target_temp = 30      # Target temperature
 hysteresis_band = 0.5 # For hysterisis control
 control_delay = 5     # For bang-bang control, seconds
-control_types = { 'None': 0, 'Bang-Bang': 1, 'Hysterisis': 2 }
+control_types = { 'None': 0, 'Bang-Bang': 1, 'Hysterisis': 2, 'Open-Loop': 1, 'Closed-Loop': 2 }
 temp_control_type = control_types['Bang-Bang'] # 0 for None, 1 for Bang-Bang, 2 for Hysterisis
-od_control_type = control_types['Hysterisis']  # 0 for None, 1 for Open-Loop, 2 for Hysterisis 
+od_control_type = control_types['Closed-Loop']  # 0 for None, 1 for Open-Loop, 2 for Closed-Loop 
 
-def temperature_control(Tw, Rs, k, dt):
+def temperature_control(k):
     # None
     if temp_control_type == 0:
         Rs[k] = Rs[k-1]
@@ -103,13 +102,24 @@ def temperature_control(Tw, Rs, k, dt):
         else:
             Rs[k] = Rs[k-1]
 
-def OD_control(OD_readings, k, dt):
+pump_state = False
+
+def OD_control(k):
     if od_control_type == 0:
         return 0
-    # Open_Loop control
+    # Open Loop control
     # Set both motor powers to 65, corresponds to fluid inflow/outflow rate of 0.02ml/s
-    if od_control_type == 1:
+    elif od_control_type == 1:
         return 0.02e-6  # Measured in m^3/s
+    # Closed Loop control
+    elif od_control_type == 2:
+        global pump_state
+        if pump_state and OD[k] <= 0.4:
+            pump_state = False
+        elif not pump_state and OD[k] >= 0.7:
+            pump_state = True
+        
+        return 0.2e-5 if pump_state else 0
 
 # Simulation length variables
 dt = 1
@@ -155,49 +165,18 @@ def run():
         Tm[k] = Tw[k] + random.gauss(0,Tm_sigma)
 
         # Update Bacteria Population (Due to bacteria growth)
-        dt_A = A[k-1] * alpha_max * (1-A[k-1]/B)
-        A[k] = A[k-1] + dt_A + random.gauss(0, Growth_Rate_sigma_mu/A[k-1])*np.sqrt(dt)
+        dA = A[k-1] * alpha_max * (1-A[k-1]/B) * dt
+        A[k] = A[k-1] + dA + random.gauss(0, Growth_Rate_sigma_mu/A[k-1])*np.sqrt(dt)
         # Update OD Measurement
-        OD[k] = C*A[k] + random.gauss(0, OD_measurement_sigma)
+        OD[k] = C*A[k] + random.gauss(0, OD_measurement_sigma) - C*A_initial
 
         # Update Heater State due to temperature control
-        temperature_control(Tm, Rs, k, dt)
+        temperature_control(k)
         # Update Temperature/OD Due to parameter readings
-        flowrate = OD_control(OD,k, dt)
-        Tw[k] = Tw[k] + (T_ambient-Tw[k]) * flowrate*dt / V_water
-        A[k] = A[k] * (1-flowrate*dt/V_water)
+        flowrate = OD_control(k)
+        Tw[k] += (T_ambient-Tw[k]) * flowrate*dt / V_water
+        A[k] *= 1-flowrate*dt/V_water
 
-    # return t, Tg, Tw, Tm, Rs, A, OD
 
-# def compare_plots_chemostat():
-    
-#     global temp_control_type, od_control_type
-#     temp_control_type = 1
-#     od_control_type = 1
-
-#     mOD, mTm, mt, mRs = get_data('Chemostat_Data.xlsx')
-#     mask = np.logical_and(mt > mt[0] + 220*60, mt < mt[0]+320*60)
-#     # mask = np.ones(mt.shape, dtype=np.bool)
-#     mt = mt[mask]; mOD = mOD[mask]; mTm = mTm[mask]; mRs = mRs[mask]
-#     mt -= mt[0]
-#     t, Tg, Tw, Tm, Rs, A, OD = run_sim(mt[-1]/len(mt), mt[-1])
-#     fig, ax1 = plt.subplots()
-#     ax1.set_xlabel('Time (min)')
-#     ax1.set_ylabel("Temperatures (°C)")
-#     ax1.plot(mt/60, mTm, label = 'Measured Temperature', color='blue')
-#     ax1.plot(t/60, Tm, label = 'Simulated Temperaure', color='black')
-    
-#     ax2 = ax1.twinx()
-    
-#     ax2.plot(mt/60, mOD, label = 'Measured OD', color='orange')
-#     ax2.plot(t/60, OD, label = 'Simulated OD', color='red')
-#     ax2.set_ylabel('Optical Denisty Readings')
-#     plt.legend()
-#     plt.title("OD Readings & Temperature over time")
-#     plt.grid()
-#     plt.show()
-
-# if __name__ == "__main__":
-#     compare_plots_chemostat()
 
  
