@@ -11,7 +11,8 @@ slider_values = {
     'h_top_bottom': ('Water-Environment heat transfer coef.', 1, 50),
     'doubling_time': ('Doubling Time', 15, 50),
     'noise': ('Noise level', 0, 2),
-    'turbidostat_rate': ('Turbidostat flow rate', 0.1e-5, 1e-5),
+    'target_temp': ('Target temperature', 25, 45),
+    'turbidostat_rate': ('Turbidostat flow rate', 0.1e-6, 0.3e-5),
     'chemostat_rate': ('Chemostat flow rate', 0.002e-6, 0.030e-6),
     'A_initial': ('Initial bacterial population (log)', 1, 20),   
     'Q_heater_const': ('Heater power', 1, 20),
@@ -36,8 +37,6 @@ def setup_sliders(mvars, ncurves=1):
     slider_spacing = (1-(topp+alloced_space+bottomp)) / len(mvars)
     slider_height = min(slider_spacing/2, 0.03)
     slider_width = 0.65
-    # buttons_start = 0.65
-    # buttons_width = 0.20
     sliders = []
     for i in range(len(mvars)):
         axs[i+ncurves].set_position([0.2, bottomp + i * slider_spacing, slider_width, slider_height])
@@ -49,26 +48,19 @@ def setup_sliders(mvars, ncurves=1):
             valmax= valmax,
             valinit = getattr(sim, mvars[i]) if mvars[i] != 'A_initial' else np.log(sim.A_initial)
         ))
-    # axs[-1].set_position([buttons_start, bottomp, buttons_width, (slider_spacing*(len(mvars)-1))])
-    # check = CheckButtons(
-    #     ax=axs[-1],
-    #     labels=[],
-    #     actives=[True, True]
-    # )
     return fig, axs, sliders
 
 def temperature_control():
     exp = data.Experiment('Temp_Control_log_22-05_12-52_103456.88_device-8_isHyst_True_bandwidth_0.4_isBang_False_bDelay_5.0_motorspeed_200_stirspeed_100.csv')
     exp.limit_range(0, 500)
 
-    slidervars = ['fill_fraction', 'h_loss', 'h_gw', 'h_top_bottom', 'Q_heater_const', 'hysteresis_band', 'noise']
+    slidervars = ['fill_fraction', 'h_loss', 'h_gw', 'h_top_bottom', 'Q_heater_const', 'hysteresis_band', 'noise', 'target_temp']
     fig, axs, sliders = setup_sliders(slidervars, ncurves=1)
     exp.plot_temperature(axs[0], label='Measured Temperature')
     exp.smooth_data()
     exp.plot_temperature(axs[0], label='Smoothed Temperature')
     [linet] = exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
     [lineb] = exp.plot_constant_in_time(axs[0], 30.2, color='black')
-    exp.plot_Rs(axs[0], 29.3, 0.4, label='Relay state')
 
     sim.T_initial = exp.Tw[0]
     sim.temp_control_type = sim.control_types['Hysterisis']
