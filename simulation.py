@@ -71,7 +71,7 @@ A_initial = 2000     # Initial Popuation, Usually 2000
 C = 4.7e-7           # Proporionality Constant between Popluation size and OD Readings
 
 # Noise Parameters
-noise = False
+noise = True
 if noise:
     Tg_sigma = 0.04
     Tm_sigma = 0.03
@@ -115,7 +115,7 @@ def OD_control(k):
     # Open Loop control
     # Set both motor powers to 65, corresponds to fluid inflow/outflow rate of 0.02ml/s
     elif od_control_type == 1:
-        return 0.02e-6  # Measured in m^3/s
+        return 0.012e-6  # Measured in m^3/s
     # Closed Loop control
     elif od_control_type == 2:
         global pump_state

@@ -48,15 +48,16 @@ def temperature_control():
     exp.limit_range(0, 500)
 
     fig, axs, sliders = setup_sliders(
-        ['fill_fraction', 'h_loss', 'Q'], [
+        ['Fill fraction', 'Loss heat transfer coefficient', 'Heater power', 'Hysterisis Band'], [
         (0.1, 0.9, sim.fill_fraction), 
-        (0.1, 10, sim.h_loss),
-        (0.1, 10, sim.Q_heater_const)
+        (0.1, 20, sim.h_loss),
+        (0.1, 15, sim.Q_heater_const),
+        (0.05, 0.5, 0.2)
     ])
     exp.smooth_data()
     exp.plot_temperature(axs[0], label='Smoothed Temperature')
-    exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
-    exp.plot_constant_in_time(axs[0], 30.2, color='black')
+    [linet] = exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
+    [lineb] = exp.plot_constant_in_time(axs[0], 30.2, color='black')
     # exp.plot_Rs(plt, 29.3, 0.4, label='Relay state')
 
     sim.T_initial = exp.Tw[0]
@@ -81,9 +82,12 @@ def temperature_control():
         sim.calculate_geometry()
         sim.h_loss = sliders[1].val
         sim.Q_heater_const = sliders[2].val
+        sim.hysteresis_band = sliders[3].val
         sim.run()
         simlinew.set_ydata(sim.Tw)
         simlines.set_ydata(sim.Ts)
+        linet.set_ydata([sim.target_temp - sim.hysteresis_band, sim.target_temp - sim.hysteresis_band])
+        lineb.set_ydata([sim.target_temp + sim.hysteresis_band, sim.target_temp + sim.hysteresis_band])
         fig.canvas.draw_idle()
 
     for slider in sliders:
@@ -152,6 +156,14 @@ def turbidostat_part1():
     axs[0].set_xlabel('Time (min)')
     axs[0].legend()
     axs[0].grid()
+    
+
+    slider_height = 0.03; slider_spacing = 0.07; bottom_start = 0.05
+    axs[0].set_position([0.2, bottom_start + 5 * slider_spacing, 0.65, 1 - bottom_start - 6 * slider_spacing])
+    axs[1].set_position([0.2, bottom_start + 3 * slider_spacing, 0.65, slider_height])
+    axs[2].set_position([0.2, bottom_start + 2 * slider_spacing, 0.65, slider_height])
+    axs[3].set_position([0.2, bottom_start + 1 * slider_spacing, 0.65, slider_height])
+    axs[4].set_position([0.2, bottom_start + 0 * slider_spacing, 0.65, slider_height])
 
     
     slider_fill_fraction = Slider(
@@ -163,21 +175,21 @@ def turbidostat_part1():
     )
     slider_h_loss = Slider(
         ax=axs[2],
-        label='h_loss',
+        label='Heat transfer coefficient',
         valmin = 0.1,
         valmax= 10,
         valinit = sim.h_loss
     )
     slider_Q = Slider(
         ax=axs[3],
-        label='Q',
+        label='Heater power',
         valmin = 0.1,
         valmax= 10,
         valinit = sim.Q_heater_const
     )
     slider_Ai = Slider(
         ax=axs[4],
-        label='log A(0)',
+        label='log A(0) (initial population)',
         valmin = 1,
         valmax= 20,
         valinit = np.log(sim.A_initial)
@@ -229,7 +241,6 @@ def turbidostat_part2():
     sim.od_control_type = sim.control_types['Closed-Loop']
     sim.dt = min(exp.t[-1]/len(exp.t), 0.5)
     sim.t_end = exp.t[-1]
-    # sim.mdot_sensor = 0.8e-5
     sim.run()
 
     slider_fill_fraction = Slider(
@@ -241,21 +252,21 @@ def turbidostat_part2():
     )
     slider_h_loss = Slider(
         ax=axs[2],
-        label='h_loss',
+        label='Heat transfer coefficient',
         valmin = 0.1,
         valmax= 20,
         valinit = sim.h_loss
     )
     slider_Q = Slider(
         ax=axs[3],
-        label='Q',
+        label='Heater power',
         valmin = 0.1,
         valmax= 15,
         valinit = sim.Q_heater_const
     )
     slider_Ai = Slider(
         ax=axs[4],
-        label='log A(0)',
+        label='log A(0) (initial population)',
         valmin = 5,
         valmax= 20,
         valinit = np.log(sim.A_initial)
@@ -288,7 +299,7 @@ def turbidostat_part2():
     plt.show()
 
 
-# temperature_control()
+temperature_control()
 # chemostat()
-# turbidostat_part1()
+turbidostat_part1()
 turbidostat_part2()

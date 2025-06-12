@@ -127,7 +127,7 @@ def show_plot(title='', ylabel='', xlabel='Time (min)'):
     plt.show()
 
 class Experiment:
-    
+
     def __init__(self, filename):
         self.filename = filename
         self.t, self.OD, self.Tw, self.Rs, self.Ms = get_data(filename)
@@ -179,7 +179,7 @@ class Experiment:
         ax.plot(self.t/60, offset + size*self.Rs, **kwargs)
 
     def plot_constant_in_time(self, ax, value, **kwargs):
-        ax.plot([self.t[0]/60, self.t[-1]/60], [value, value], **kwargs)
+        return ax.plot([self.t[0]/60, self.t[-1]/60], [value, value], **kwargs)
         
 
 
