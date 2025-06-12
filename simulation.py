@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # Vessel Geometry Parameters (SI units)
 R = 0.03             # Radius of cylinder (m)
 L = 0.06;            # Height of cylinder (m)
-fill_fraction = 0.5  #Fraction of total volume filled with water
+fill_fraction = 0.281  #Fraction of total volume filled with water
 
 # Water Properties
 rho_water = 1000               # Water density (kg/m^3)
@@ -21,7 +21,7 @@ C_glass = mass_vessel * c_vessel   # Glass heat capacity (J/K)
 def calculate_geometry():
 
     global V_vessel, V_water, A_side_total, h_water, A_side_water, A_bottom, A_water_contact
-    global A_side_env, A_top, A_env, m_water, C_water, A_water_contact
+    global A_side_env, A_top, A_env, m_water, C_water, A_water_contact, A_water_env
 
     V_vessel = np.pi * R**2 * L          # Total vessel volume (m^3)
     V_water = fill_fraction * V_vessel   # Water volume (m^3)
@@ -38,9 +38,10 @@ def calculate_geometry():
         
     # The environmental losses occur from the vessel surfaces not in contact with water.
     # Side area not in
-    A_side_env = A_side_total - A_side_water
+    A_side_env = A_side_total - A_side_water   # Total area of jacket exposed to ambient
     A_top = np.pi * R**2 if fill_fraction < 1 else 0
-    A_env = A_side_env + A_top + A_bottom  # Total area exposed to ambient
+    A_env = A_side_env + A_bottom
+    A_water_env = A_top # Total area of water exposed to ambient
 
     m_water = rho_water * V_water  # Mass of water    
     C_water = m_water * c_water    # Water heat capacity (J/K)
@@ -49,11 +50,15 @@ calculate_geometry()
     
 # Heat Transfer Parameters
 # Heater: a fixed power is applied when ON.
-Q_heater_const = 5  # Heater power (W) when on (Orignal = 10)
+Q_heater_const = 3.78  # Heater power (W) when on (Orignal = 10)
     
 # Heat transfer coefficients (W/(m^2*K))
 h_gw = 25    # From glass to water (Original = 50)
-h_loss = 2.88 # From glass to ambient (Original = 10)
+h_loss = 4.162 # From glass to ambient (Original = 10)
+h_top_bottom = 2
+
+mdot_sensor = 1e-5 # Mass transfer rate throigh the sensor pump, in SI units
+m_sensor = 1e-3      # Mass of the water in the sensor chamber, in SI units
 
 T_ambient = 22   # Ambient temperature (°C)
 T_initial = 28.5
@@ -131,6 +136,7 @@ t = np.linspace(0, t_end, n) # In seconds
 Tg = np.ones(n)*T_ambient    # Glass vessel temperature (°C)
 Tw = np.ones(n)*T_initial    # Water temperature (°C)
 Twd = np.zeros(n)            # Water temperature derivative
+Ts = np.ones(n)*T_initial
 Tm = np.copy(Tw)             # Measured Temerature(Added noise)
 Rs = np.zeros(n)             # Record of heater power over time
 A = np.ones(n)*A_initial     # Record of bacteria population over time (Proportional to OD)
@@ -138,7 +144,7 @@ OD = np.ones(n)*A_initial*C  # Optical Denisity
 
 def run():
     n = int(t_end/dt)
-    global t, Tg, Tw, Twd, Tm, Rs, A, OD
+    global t, Tg, Tw, Twd, Ts, Tm, Rs, A, OD
     t = np.linspace(0, t_end, n)
     Tg = np.ones(n)*T_ambient
     Tw = np.ones(n)*T_initial
@@ -147,23 +153,33 @@ def run():
     Rs = np.zeros(n)
     A = np.ones(n)*A_initial 
     OD = np.ones(n)*A_initial*C 
+    Ts = np.ones(n)*T_initial
 
     # Initialization of Arrays
     for k in range(1, n):
    
-        # Heater energy
+        # Tranfered heat terms
         Q_heater = Rs[max(k-1, 0)] * Q_heater_const
-        # Glass energy balance
-        Q_to_water = h_gw * A_water_contact * (Tg[k-1] - Tw[k-1])
-        Q_loss_env = h_loss * A_env * (Tg[k-1] - T_ambient)
-        dTg =  (Q_heater - Q_to_water - Q_loss_env)  * dt / C_glass
-        Tg[k] = Tg[k-1] + dTg + random.gauss(0, Tg_sigma)*np.sqrt(dt)
-        # Water energy balance
-        Twd[k] = (Q_to_water - Q_loss_env) / C_water
-        Tw[k] = Tw[k-1] + Twd[k] * dt
-        # Measurement noise for water temperature readings
-        Tm[k] = Tw[k] + random.gauss(0,Tm_sigma)
+        Q_g2w = h_gw * A_water_contact * (Tg[k-1] - Tw[k-1])
+        Q_loss_env_g = h_loss * A_env * (Tg[k-1] - T_ambient)
+        Q_loss_env_w = h_top_bottom * A_water_env * (Tw[k-1] - T_ambient)
+        Q_s2w = c_water * mdot_sensor * (Ts[k-1] - Tw[k-1])
 
+        # Jacket energy equation
+        dTgdt =  (Q_heater - Q_g2w - Q_loss_env_g) / C_glass
+        Tg[k] = Tg[k-1] + dTgdt * dt + random.gauss(0, Tg_sigma)*np.sqrt(dt)
+
+        # Water energy equation
+        Twd[k] = (Q_g2w - Q_loss_env_w + Q_s2w) / C_water
+        Tw[k] = Tw[k-1] + Twd[k] * dt
+        
+        # Inline sensor equation
+        dTsdt = -Q_s2w / (m_sensor * c_water)
+        Ts[k] = Ts[k-1] + dTsdt*dt
+
+        # Measurement noise for water temperature readings
+        Tm[k] = Ts[k] + random.gauss(0, Tm_sigma)
+        
         # Update Bacteria Population (Due to bacteria growth)
         dA = A[k-1] * alpha_max * (1-A[k-1]/B) * dt
         A[k] = A[k-1] + dA + random.gauss(0, Growth_Rate_sigma_mu/A[k-1])*np.sqrt(dt)
@@ -172,10 +188,12 @@ def run():
 
         # Update Heater State due to temperature control
         temperature_control(k)
+        
         # Update Temperature/OD Due to parameter readings
         flowrate = OD_control(k)
         Tw[k] += (T_ambient-Tw[k]) * flowrate*dt / V_water
         A[k] *= 1-flowrate*dt/V_water
+
 
 
 

@@ -5,6 +5,22 @@ import numpy as np
 from matplotlib.widgets import Button, Slider
 
 
+def setup_sliders(labels, values, slider_height = 0.03, slider_spacing = 0.07, bottom_start = 0.05):
+    fig, axs = plt.subplots(len(labels)+1, 1)
+    axs[0].set_position([0.2, bottom_start + (len(labels)+1) * slider_spacing, 0.65, 1 - bottom_start - (len(labels)+2) * slider_spacing])
+    sliders = []
+    for i in range(len(labels)):
+        axs[i+1].set_position([0.2, bottom_start + i * slider_spacing, 0.65, slider_height])
+        sliders.append(Slider(
+            ax=axs[i+1],
+            label=labels[i],
+            valmin = values[i][0],
+            valmax= values[i][1],
+            valinit = values[i][2]
+        ))
+    return fig, axs, sliders
+
+
 def temperature_control_simple():
     exp = data.Experiment('Temp_Control_log_22-05_12-52_103456.88_device-8_isHyst_True_bandwidth_0.4_isBang_False_bDelay_5.0_motorspeed_200_stirspeed_100.csv')
     exp.limit_range(0, 500)
@@ -31,43 +47,17 @@ def temperature_control():
     exp = data.Experiment('Temp_Control_log_22-05_12-52_103456.88_device-8_isHyst_True_bandwidth_0.4_isBang_False_bDelay_5.0_motorspeed_200_stirspeed_100.csv')
     exp.limit_range(0, 500)
 
-    fig, axs = plt.subplots(4, 1)
-    # exp.plot_temperature(pltax, label='Measured Temperaure')
+    fig, axs, sliders = setup_sliders(
+        ['fill_fraction', 'h_loss', 'Q'], [
+        (0.1, 0.9, sim.fill_fraction), 
+        (0.1, 10, sim.h_loss),
+        (0.1, 10, sim.Q_heater_const)
+    ])
     exp.smooth_data()
-    slider_height = 0.03  # Smaller height
-    slider_spacing = 0.07   # Vertical space between sliders
-    bottom_start = 0.05
-
     exp.plot_temperature(axs[0], label='Smoothed Temperature')
     exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
     exp.plot_constant_in_time(axs[0], 30.2, color='black')
     # exp.plot_Rs(plt, 29.3, 0.4, label='Relay state')
-    
-    axs[0].set_position([0.2, bottom_start + 4 * slider_spacing, 0.65, 1 - bottom_start - 5 * slider_spacing])
-    axs[1].set_position([0.2, bottom_start + 2 * slider_spacing, 0.65, slider_height])
-    axs[2].set_position([0.2, bottom_start + 1 * slider_spacing, 0.65, slider_height])
-    axs[3].set_position([0.2, bottom_start + 0 * slider_spacing, 0.65, slider_height])
-    slider_fill_fraction = Slider(
-        ax=axs[1],
-        label='Fill fraction',
-        valmin = 0.05,
-        valmax= 0.9,
-        valinit = sim.fill_fraction
-    )
-    slider_h_loss = Slider(
-        ax=axs[2],
-        label='h_loss',
-        valmin = 0.1,
-        valmax= 10,
-        valinit = sim.h_loss
-    )
-    slider_Q = Slider(
-        ax=axs[3],
-        label='Q',
-        valmin = 0.1,
-        valmax= 10,
-        valinit = sim.Q_heater_const
-    )
 
     sim.T_initial = exp.Tw[0]
     sim.temp_control_type = sim.control_types['Hysterisis']
@@ -77,7 +67,8 @@ def temperature_control():
     sim.t_end = exp.t[-1]
     sim.run()
 
-    [simline] = axs[0].plot(sim.t/60, sim.Tw, label='Simulated Temperature')
+    [simlinew] = axs[0].plot(sim.t/60, sim.Tw, label='Simulated Water Temperatures')
+    [simlines] = axs[0].plot(sim.t/60, sim.Ts, label='Simulated Sensor Temperatures')
 
     axs[0].set_title('Temperature Control Experiment')
     axs[0].set_ylabel('Temperatures ($^\\circ C$)')
@@ -86,18 +77,18 @@ def temperature_control():
     axs[0].legend()
 
     def update_func(val):
-        sim.fill_fraction = slider_fill_fraction.val
+        sim.fill_fraction = sliders[0].val
         sim.calculate_geometry()
-        sim.h_loss = slider_h_loss.val
-        sim.Q_heater_const = slider_Q.val
+        sim.h_loss = sliders[1].val
+        sim.Q_heater_const = sliders[2].val
         sim.run()
-        simline.set_ydata(sim.Tw)
+        simlinew.set_ydata(sim.Tw)
+        simlines.set_ydata(sim.Ts)
         fig.canvas.draw_idle()
 
-    slider_Q.on_changed(update_func)
-    slider_h_loss.on_changed(update_func)
-    slider_fill_fraction.on_changed(update_func)
-
+    for slider in sliders:
+        slider.on_changed(update_func)
+    
     plt.show()
 
 
@@ -162,14 +153,7 @@ def turbidostat_part1():
     axs[0].legend()
     axs[0].grid()
 
-    slider_height = 0.03  # Smaller height
-    slider_spacing = 0.07   # Vertical space between sliders
-    bottom_start = 0.05
-    axs[0].set_position([0.2, bottom_start + 5 * slider_spacing, 0.65, 1 - bottom_start - 6 * slider_spacing])
-    axs[1].set_position([0.2, bottom_start + 3 * slider_spacing, 0.65, slider_height])
-    axs[2].set_position([0.2, bottom_start + 2 * slider_spacing, 0.65, slider_height])
-    axs[3].set_position([0.2, bottom_start + 1 * slider_spacing, 0.65, slider_height])
-    axs[4].set_position([0.2, bottom_start + 0 * slider_spacing, 0.65, slider_height])
+    
     slider_fill_fraction = Slider(
         ax=axs[1],
         label='Fill fraction',
@@ -229,6 +213,25 @@ def turbidostat_part2():
     axs[2].set_position([0.2, bottom_start + 2 * slider_spacing, 0.65, slider_height])
     axs[3].set_position([0.2, bottom_start + 1 * slider_spacing, 0.65, slider_height])
     axs[4].set_position([0.2, bottom_start + 0 * slider_spacing, 0.65, slider_height])
+
+    exp.plot_temperature(axs[0], label='Measured Temperaure')
+    exp.smooth_data()
+    exp.plot_temperature(axs[0], label='Smoothed Temperature')
+    exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
+    exp.plot_constant_in_time(axs[0], 30.2, color='black')
+
+    sim.fill_fraction = 0.5145
+    sim.h_loss = 14.56
+    sim.Q_heater_const = 12.23
+    sim.A_initial = np.exp(11.48)
+    sim.temp_control_type = sim.control_types['Hysterisis']
+    sim.hysteresis_band = 0.15
+    sim.od_control_type = sim.control_types['Closed-Loop']
+    sim.dt = min(exp.t[-1]/len(exp.t), 0.5)
+    sim.t_end = exp.t[-1]
+    # sim.mdot_sensor = 0.8e-5
+    sim.run()
+
     slider_fill_fraction = Slider(
         ax=axs[1],
         label='Fill fraction',
@@ -240,14 +243,14 @@ def turbidostat_part2():
         ax=axs[2],
         label='h_loss',
         valmin = 0.1,
-        valmax= 10,
+        valmax= 20,
         valinit = sim.h_loss
     )
     slider_Q = Slider(
         ax=axs[3],
         label='Q',
         valmin = 0.1,
-        valmax= 10,
+        valmax= 15,
         valinit = sim.Q_heater_const
     )
     slider_Ai = Slider(
@@ -258,22 +261,8 @@ def turbidostat_part2():
         valinit = np.log(sim.A_initial)
     )
 
-    exp.plot_temperature(axs[0], label='Measured Temperaure')
-    exp.smooth_data()
-    exp.plot_temperature(axs[0], label='Smoothed Temperature')
-    exp.plot_constant_in_time(axs[0], 29.8, label='Hysterisis Bounds', color='black')
-    exp.plot_constant_in_time(axs[0], 30.2, color='black')
-
-    sim.A_initial = 0.95e5
-    sim.temp_control_type = sim.control_types['Hysterisis']
-    sim.hysteresis_band = 0.15
-    sim.od_control_type = sim.control_types['Closed-Loop']
-    sim.dt = min(exp.t[-1]/len(exp.t), 0.5)
-    sim.t_end = exp.t[-1]
-    sim.run()
-
-    [simline] = axs[0].plot(sim.t/60, sim.Tw, label='Simulated Temperatures')
-    # [odsimline] = axs[0].plot(sim.t/60, 25+sim.OD/2, label='OD')
+    # [simlinew] = axs[0].plot(sim.t/60, sim.Tw, label='Simulated Water Temperatures')
+    [simlines] = axs[0].plot(sim.t/60, sim.Ts, label='Simulated Sensor Temperatures')
     axs[0].set_title('Turbidostat Experiment')
     axs[0].set_ylabel('Temperatures ($^\\circ C$)')
     axs[0].set_xlabel('Time (min)')
@@ -287,8 +276,8 @@ def turbidostat_part2():
         sim.h_loss = slider_h_loss.val
         sim.Q_heater_const = slider_Q.val
         sim.run()
-        simline.set_ydata(sim.Tw)
-        # odsimline.set_ydata(25+sim.OD/2)
+        # simlinew.set_ydata(sim.Tw)
+        simlines.set_ydata(sim.Ts)
         fig.canvas.draw_idle()
 
     slider_fill_fraction.on_changed(update_func)
@@ -299,7 +288,7 @@ def turbidostat_part2():
     plt.show()
 
 
-temperature_control()
-chemostat()
-turbidostat_part1()
+# temperature_control()
+# chemostat()
+# turbidostat_part1()
 turbidostat_part2()
